@@ -17,16 +17,7 @@
 #include <string.h>
 #include <string>
 #include <unordered_set>
-#if defined(ARDUINO_ARCH_ESP32) && defined(CONFIG_ARDUHAL_ESP_LOG)
 #include "esp32-hal-log.h"
-#define LOG_TAG ""
-#else
-#include "esp_log.h"
-static const char* LOG_TAG = "BLEServer";
-#endif
-
-
-
 
 /**
  * @brief Construct a %BLE Server
@@ -73,12 +64,12 @@ BLEService* BLEServer::createService(const char* uuid) {
  * @return A reference to the new service object.
  */
 BLEService* BLEServer::createService(BLEUUID uuid, uint32_t numHandles, uint8_t inst_id) {
-	ESP_LOGD(LOG_TAG, ">> createService - %s", uuid.toString().c_str());
+	log_v(">> createService - %s", uuid.toString().c_str());
 	m_semaphoreCreateEvt.take("createService");
 
 	// Check that a service with the supplied UUID does not already exist.
 	if (m_serviceMap.getByUUID(uuid) != nullptr) {
-		ESP_LOGW(LOG_TAG, "<< Attempt to create a new service with uuid %s but a service with that UUID already exists.",
+		log_w("<< Attempt to create a new service with uuid %s but a service with that UUID already exists.",
 			uuid.toString().c_str());
 	}
 
@@ -89,7 +80,7 @@ BLEService* BLEServer::createService(BLEUUID uuid, uint32_t numHandles, uint8_t 
 
 	m_semaphoreCreateEvt.wait("createService");
 
-	ESP_LOGD(LOG_TAG, "<< createService");
+	log_v("<< createService");
 	return pService;
 } // createService
 
@@ -149,7 +140,7 @@ uint16_t BLEServer::getGattsIf() {
  *
  */
 void BLEServer::handleGATTServerEvent(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param) {
-	ESP_LOGD(LOG_TAG, ">> handleGATTServerEvent: %s",
+	log_v(">> handleGATTServerEvent: %s",
 		BLEUtils::gattServerEventTypeToString(event).c_str());
 
 	switch(event) {
@@ -211,13 +202,19 @@ void BLEServer::handleGATTServerEvent(esp_gatts_cb_event_t event, esp_gatt_if_t 
 		// If we receive a disconnect event then invoke the callback for disconnects (if one is present).
 		// we also want to start advertising again.
 		case ESP_GATTS_DISCONNECT_EVT: {
-			m_connectedCount--;                          // Decrement the number of connected devices count.
 			if (m_pServerCallbacks != nullptr) {         // If we have callbacks, call now.
 				m_pServerCallbacks->onDisconnect(this);
 			}
-			startAdvertising(); //- do this with some delay from the loop()
-			removePeerDevice(param->disconnect.conn_id, false);
-			break;
+            if(m_connId == ESP_GATT_IF_NONE) {
+                return;
+            }
+
+            // only decrement if connection is found in map and removed
+            // sometimes this event triggers w/o a valid connection
+			if(removePeerDevice(param->disconnect.conn_id, false)) {
+                m_connectedCount--;                          // Decrement the number of connected devices count.
+            }
+            break;
 		} // ESP_GATTS_DISCONNECT_EVT
 
 
@@ -277,7 +274,7 @@ void BLEServer::handleGATTServerEvent(esp_gatts_cb_event_t event, esp_gatt_if_t 
 	// Invoke the handler for every Service we have.
 	m_serviceMap.handleGATTServerEvent(event, gatts_if, param);
 
-	ESP_LOGD(LOG_TAG, "<< handleGATTServerEvent");
+	log_v("<< handleGATTServerEvent");
 } // handleGATTServerEvent
 
 
@@ -287,11 +284,11 @@ void BLEServer::handleGATTServerEvent(esp_gatts_cb_event_t event, esp_gatt_if_t 
  * @return N/A
  */
 void BLEServer::registerApp(uint16_t m_appId) {
-	ESP_LOGD(LOG_TAG, ">> registerApp - %d", m_appId);
+	log_v(">> registerApp - %d", m_appId);
 	m_semaphoreRegisterAppEvt.take("registerApp"); // Take the mutex, will be released by ESP_GATTS_REG_EVT event.
 	::esp_ble_gatts_app_register(m_appId);
 	m_semaphoreRegisterAppEvt.wait("registerApp");
-	ESP_LOGD(LOG_TAG, "<< registerApp");
+	log_v("<< registerApp");
 } // registerApp
 
 
@@ -324,9 +321,9 @@ void BLEServer::removeService(BLEService* service) {
  * retrieving the advertising object and invoking start upon it.
  */
 void BLEServer::startAdvertising() {
-	ESP_LOGD(LOG_TAG, ">> startAdvertising");
+	log_v(">> startAdvertising");
 	BLEDevice::startAdvertising();
-	ESP_LOGD(LOG_TAG, "<< startAdvertising");
+	log_v("<< startAdvertising");
 } // startAdvertising
 
 /**
@@ -344,34 +341,34 @@ bool BLEServer::connect(BLEAddress address) {
 		1                              // direct connection
 	);
 	if (errRc != ESP_OK) {
-		ESP_LOGE(LOG_TAG, "esp_ble_gattc_open: rc=%d %s", errRc, GeneralUtils::errorToString(errRc));
+		log_e("esp_ble_gattc_open: rc=%d %s", errRc, GeneralUtils::errorToString(errRc));
 		return false;
 	}
 
 	uint32_t rc = m_semaphoreOpenEvt.wait("connect");   // Wait for the connection to complete.
-	ESP_LOGD(LOG_TAG, "<< connect(), rc=%d", rc==ESP_GATT_OK);
+	log_v("<< connect(), rc=%d", rc==ESP_GATT_OK);
 	return rc == ESP_GATT_OK;
 } // connect
 
 
 
 void BLEServerCallbacks::onConnect(BLEServer* pServer) {
-	ESP_LOGD("BLEServerCallbacks", ">> onConnect(): Default");
-	ESP_LOGD("BLEServerCallbacks", "Device: %s", BLEDevice::toString().c_str());
-	ESP_LOGD("BLEServerCallbacks", "<< onConnect()");
+	log_d("BLEServerCallbacks", ">> onConnect(): Default");
+	log_d("BLEServerCallbacks", "Device: %s", BLEDevice::toString().c_str());
+	log_d("BLEServerCallbacks", "<< onConnect()");
 } // onConnect
 
 void BLEServerCallbacks::onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t* param) {
-	ESP_LOGD("BLEServerCallbacks", ">> onConnect(): Default");
-	ESP_LOGD("BLEServerCallbacks", "Device: %s", BLEDevice::toString().c_str());
-	ESP_LOGD("BLEServerCallbacks", "<< onConnect()");
+	log_d("BLEServerCallbacks", ">> onConnect(): Default");
+	log_d("BLEServerCallbacks", "Device: %s", BLEDevice::toString().c_str());
+	log_d("BLEServerCallbacks", "<< onConnect()");
 } // onConnect
 
 
 void BLEServerCallbacks::onDisconnect(BLEServer* pServer) {
-	ESP_LOGD("BLEServerCallbacks", ">> onDisconnect(): Default");
-	ESP_LOGD("BLEServerCallbacks", "Device: %s", BLEDevice::toString().c_str());
-	ESP_LOGD("BLEServerCallbacks", "<< onDisconnect()");
+	log_d("BLEServerCallbacks", ">> onDisconnect(): Default");
+	log_d("BLEServerCallbacks", "Device: %s", BLEDevice::toString().c_str());
+	log_d("BLEServerCallbacks", "<< onDisconnect()");
 } // onDisconnect
 
 /* multi connect support */
@@ -404,8 +401,8 @@ void BLEServer::addPeerDevice(void* peer, bool _client, uint16_t conn_id) {
 	m_connectedServersMap.insert(std::pair<uint16_t, conn_status_t>(conn_id, status));	
 }
 
-void BLEServer::removePeerDevice(uint16_t conn_id, bool _client) {
-	m_connectedServersMap.erase(conn_id);
+bool BLEServer::removePeerDevice(uint16_t conn_id, bool _client) {
+	return m_connectedServersMap.erase(conn_id) > 0;
 }
 /* multi connect support */
 
@@ -421,4 +418,9 @@ void BLEServer::updateConnParams(esp_bd_addr_t remote_bda, uint16_t minInterval,
 	conn_params.timeout = timeout;    // timeout = 400*10ms = 4000ms
 	esp_ble_gap_update_conn_params(&conn_params); 
 }
+
+void BLEServer::disconnect(uint16_t connId) {
+	esp_ble_gatts_close(m_gatts_if, connId);
+}
+
 #endif // CONFIG_BT_ENABLED

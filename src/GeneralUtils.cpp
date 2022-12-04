@@ -18,15 +18,7 @@
 #include <esp_wifi.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
-
-#if defined(ARDUINO_ARCH_ESP32) && defined(CONFIG_ARDUHAL_ESP_LOG)
 #include "esp32-hal-log.h"
-#define LOG_TAG ""
-#else
-#include "esp_log.h"
-static const char* LOG_TAG = "GeneralUtils";
-#endif
-
 
 static const char kBase64Alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	"abcdefghijklmnopqrstuvwxyz"
@@ -112,14 +104,13 @@ bool GeneralUtils::base64Encode(const std::string& in, std::string* out) {
  * * Amount of free RAM
  */
 void GeneralUtils::dumpInfo() {
-	size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 	esp_chip_info_t chipInfo;
 	esp_chip_info(&chipInfo);
-	ESP_LOGV(LOG_TAG, "--- dumpInfo ---");
-	ESP_LOGV(LOG_TAG, "Free heap: %d", freeHeap);
-	ESP_LOGV(LOG_TAG, "Chip Info: Model: %d, cores: %d, revision: %d", chipInfo.model, chipInfo.cores, chipInfo.revision);
-	ESP_LOGV(LOG_TAG, "ESP-IDF version: %s", esp_get_idf_version());
-	ESP_LOGV(LOG_TAG, "---");
+	log_v("--- dumpInfo ---");
+	log_v("Free heap: %d", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+	log_v("Chip Info: Model: %d, cores: %d, revision: %d", chipInfo.model, chipInfo.cores, chipInfo.revision);
+	log_v("ESP-IDF version: %s", esp_get_idf_version());
+	log_v("---");
 } // dumpInfo
 
 
@@ -237,7 +228,7 @@ void GeneralUtils::hexDump(uint8_t* pData, uint32_t length) {
 		if (index % 16 == 0) {
 			strcpy(hexBuf, hex.str().c_str());
 			strcpy(asciiBuf, ascii.str().c_str());
-			ESP_LOGV(tag, "%s %s", hexBuf, asciiBuf);
+			log_v("%s %s", hexBuf, asciiBuf);
 			hex.str("");
 			ascii.str("");
 		}
@@ -249,8 +240,8 @@ void GeneralUtils::hexDump(uint8_t* pData, uint32_t length) {
 		}
 		strcpy(hexBuf, hex.str().c_str());
 		strcpy(asciiBuf, ascii.str().c_str());
-		ESP_LOGV(tag, "%s %s", hexBuf, asciiBuf);
-		//ESP_LOGV(tag, "%s %s", hex.str().c_str(), ascii.str().c_str());
+		log_v("%s %s", hexBuf, asciiBuf);
+		//log_v("%s %s", hex.str().c_str(), ascii.str().c_str());
 	}
 	FreeRTOS::sleep(1000);
 }
@@ -272,7 +263,7 @@ void GeneralUtils::hexDump(uint8_t* pData, uint32_t length) {
 		}
 		index++;
 		if (index % 16 == 0) {
-			ESP_LOGV(tag, "%s %s", hex.str().c_str(), ascii.str().c_str());
+			log_v("%s %s", hex.str().c_str(), ascii.str().c_str());
 			hex.str("");
 			ascii.str("");
 		}
@@ -282,7 +273,7 @@ void GeneralUtils::hexDump(uint8_t* pData, uint32_t length) {
 			hex << "   ";
 			index++;
 		}
-		ESP_LOGV(tag, "%s %s", hex.str().c_str(), ascii.str().c_str());
+		log_v("%s %s", hex.str().c_str(), ascii.str().c_str());
 	}
 	FreeRTOS::sleep(1000);
 }
@@ -302,8 +293,8 @@ void GeneralUtils::hexDump(const uint8_t* pData, uint32_t length) {
 	char tempBuf[80];
 	uint32_t lineNumber = 0;
 
-	ESP_LOGV(LOG_TAG, "     00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f");
-	ESP_LOGV(LOG_TAG, "     -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --");
+	log_v("     00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f");
+	log_v("     -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --");
 	strcpy(ascii, "");
 	strcpy(hex, "");
 	uint32_t index = 0;
@@ -318,7 +309,7 @@ void GeneralUtils::hexDump(const uint8_t* pData, uint32_t length) {
 		strcat(ascii, tempBuf);
 		index++;
 		if (index % 16 == 0) {
-			ESP_LOGV(LOG_TAG, "%.4x %s %s", lineNumber * 16, hex, ascii);
+			log_v("%.4x %s %s", lineNumber * 16, hex, ascii);
 			strcpy(ascii, "");
 			strcpy(hex, "");
 			lineNumber++;
@@ -329,7 +320,7 @@ void GeneralUtils::hexDump(const uint8_t* pData, uint32_t length) {
 			strcat(hex, "   ");
 			index++;
 		}
-		ESP_LOGV(LOG_TAG, "%.4x %s %s", lineNumber * 16, hex, ascii);
+		log_v("%.4x %s %s", lineNumber * 16, hex, ascii);
 	}
 } // hexDump
 
@@ -340,9 +331,12 @@ void GeneralUtils::hexDump(const uint8_t* pData, uint32_t length) {
  * @return A string representation of the IP address.
  */
 std::string GeneralUtils::ipToString(uint8_t *ip) {
-	std::stringstream s;
-	s << (int) ip[0] << '.' << (int) ip[1] << '.' << (int) ip[2] << '.' << (int) ip[3];
-	return s.str();
+	auto size = 16;
+	char *val = (char*)malloc(size);
+	snprintf(val, size, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+	std::string res(val);
+	free(val);
+	return res;
 } // ipToString
 
 
@@ -355,11 +349,14 @@ std::string GeneralUtils::ipToString(uint8_t *ip) {
 std::vector<std::string> GeneralUtils::split(std::string source, char delimiter) {
 	// See also: https://stackoverflow.com/questions/5167625/splitting-a-c-stdstring-using-tokens-e-g
 	std::vector<std::string> strings;
-	std::istringstream iss(source);
-	std::string s;
-	while (std::getline(iss, s, delimiter)) {
-		strings.push_back(trim(s));
+	std::size_t current, previous = 0;
+	current = source.find(delimiter);
+	while (current != std::string::npos) {
+		strings.push_back(trim(source.substr(previous, current - previous)));
+		previous = current + 1;
+		current = source.find(delimiter, previous);
 	}
+	strings.push_back(trim(source.substr(previous, current - previous)));
 	return strings;
 } // split
 

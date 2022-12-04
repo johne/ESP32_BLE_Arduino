@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <string.h>
 #include <stdio.h>
+#include <malloc.h>
 #ifdef ARDUINO_ARCH_ESP32
 #include "esp32-hal-log.h"
 #endif
@@ -58,14 +59,37 @@ BLEAddress::BLEAddress(std::string stringAddress) {
  * @return True if the addresses are equal.
  */
 bool BLEAddress::equals(BLEAddress otherAddress) {
-	return memcmp(otherAddress.getNative(), m_address, 6) == 0;
+	return memcmp(otherAddress.getNative(), m_address, ESP_BD_ADDR_LEN) == 0;
 } // equals
 
+bool BLEAddress::operator==(const BLEAddress& otherAddress) const {
+	return memcmp(otherAddress.m_address, m_address, ESP_BD_ADDR_LEN) == 0;
+}
+
+bool BLEAddress::operator!=(const BLEAddress& otherAddress) const {
+  return !(*this == otherAddress);
+}
+
+bool BLEAddress::operator<(const BLEAddress& otherAddress) const {
+  return memcmp(otherAddress.m_address, m_address, ESP_BD_ADDR_LEN) < 0;
+}
+
+bool BLEAddress::operator<=(const BLEAddress& otherAddress) const {
+  return !(*this > otherAddress);
+}
+
+bool BLEAddress::operator>=(const BLEAddress& otherAddress) const {
+  return !(*this < otherAddress);
+}
+
+bool BLEAddress::operator>(const BLEAddress& otherAddress) const {
+  return memcmp(otherAddress.m_address, m_address, ESP_BD_ADDR_LEN) > 0;
+}
 
 /**
  * @brief Return the native representation of the address.
  * @return The native representation of the address.
- */
+ */   
 esp_bd_addr_t *BLEAddress::getNative() {
 	return &m_address;
 } // getNative
@@ -83,13 +107,11 @@ esp_bd_addr_t *BLEAddress::getNative() {
  * @return The string representation of the address.
  */
 std::string BLEAddress::toString() {
-	std::stringstream stream;
-	stream << std::setfill('0') << std::setw(2) << std::hex << (int) ((uint8_t*) (m_address))[0] << ':';
-	stream << std::setfill('0') << std::setw(2) << std::hex << (int) ((uint8_t*) (m_address))[1] << ':';
-	stream << std::setfill('0') << std::setw(2) << std::hex << (int) ((uint8_t*) (m_address))[2] << ':';
-	stream << std::setfill('0') << std::setw(2) << std::hex << (int) ((uint8_t*) (m_address))[3] << ':';
-	stream << std::setfill('0') << std::setw(2) << std::hex << (int) ((uint8_t*) (m_address))[4] << ':';
-	stream << std::setfill('0') << std::setw(2) << std::hex << (int) ((uint8_t*) (m_address))[5];
-	return stream.str();
+	auto size = 18;
+	char *res = (char*)malloc(size);
+	snprintf(res, size, "%02x:%02x:%02x:%02x:%02x:%02x", m_address[0], m_address[1], m_address[2], m_address[3], m_address[4], m_address[5]);
+	std::string ret(res);
+	free(res);
+	return ret;
 } // toString
 #endif

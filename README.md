@@ -13,3 +13,4 @@ https://github.com/nkolban/esp32-snippets/issues
 Documentation for using the library can be found here:
 
 https://github.com/nkolban/esp32-snippets/tree/master/Documentation
+
